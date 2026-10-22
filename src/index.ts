@@ -2,9 +2,7 @@ import "dotenv/config";
 import Bolt from "@slack/bolt";
 import { isTriggeredIncident, parsePagerDutyMessage } from "./slack/pagerdutyMessage.js";
 import { resolveChannelId } from "./slack/resolveChannel.js";
-import { findErrorClusters } from "./datadog/traces.js";
-import { lookupDebugId } from "./cal/client.js";
-import { generateRca } from "./agent/rca.js";
+import { buildRcaMessage } from "./pipeline.js";
 
 const { App } = Bolt;
 
@@ -40,20 +38,19 @@ app.message(async ({ message, say }) => {
 
   console.log(`Alert for ${alert.serviceName} at ${alert.triggeredAt.toISOString()}`);
 
-  const clusters = await findErrorClusters(alert.serviceName, alert.triggeredAt);
-
-  for (const cluster of clusters) {
-    if (!cluster.errorMessage && cluster.sampleTraceId) {
-      cluster.debugId = (await lookupDebugId(cluster.sampleTraceId)) ?? undefined;
-    }
+  let text: string;
+  try {
+    text = await buildRcaMessage(alert);
+  } catch (err) {
+    console.error("Unexpected failure building RCA:", err);
+    text = `:warning: Something went wrong while analyzing *${alert.serviceName}*. Please investigate manually.`;
   }
 
-  const rca = await generateRca(alert.serviceName, clusters);
-
-  await say({
-    text: rca,
-    thread_ts: msg.ts,
-  });
+  try {
+    await say({ text, thread_ts: msg.ts });
+  } catch (err) {
+    console.error("Failed to post reply to Slack:", err);
+  }
 });
 
 await app.start();

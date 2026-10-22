@@ -1,4 +1,5 @@
 import { v2, client } from "@datadog/datadog-api-client";
+import { withRetry } from "../lib/retry.js";
 
 const MAX_TRACES = 100;
 const MAX_CLUSTERS = 5;
@@ -35,22 +36,24 @@ export async function findErrorClusters(
   const to = new Date(around.getTime() + 2 * 60 * 1000).toISOString();
 
   const api = getSpansApi();
-  const response = await api.listSpans({
-    body: {
-      data: {
-        attributes: {
-          filter: {
-            query: `service:${serviceName} status:error`,
-            from,
-            to,
+  const response = await withRetry(() =>
+    api.listSpans({
+      body: {
+        data: {
+          attributes: {
+            filter: {
+              query: `service:${serviceName} status:error`,
+              from,
+              to,
+            },
+            sort: "-timestamp",
+            page: { limit: MAX_TRACES },
           },
-          sort: "-timestamp",
-          page: { limit: MAX_TRACES },
+          type: "search_request",
         },
-        type: "search_request",
       },
-    },
-  });
+    })
+  );
 
   const spans = response.data ?? [];
   const clusters = new Map<string, ErrorCluster>();

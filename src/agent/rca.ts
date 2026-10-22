@@ -1,16 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ErrorCluster } from "../datadog/traces.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  maxRetries: 3,
+  timeout: 60_000,
+});
 
-export async function generateRca(serviceName: string, clusters: ErrorCluster[]): Promise<string> {
-  const clusterSummary = clusters
+export function summarizeClusters(clusters: ErrorCluster[]): string {
+  return clusters
     .map(
       (c, i) =>
         `${i + 1}. [${c.count}x] ${c.errorType}: ${c.errorMessage || "(no message — see debug detail)"}` +
         (c.debugId ? `\n   Debug detail: ${c.debugId}` : "")
     )
     .join("\n");
+}
+
+export async function generateRca(serviceName: string, clusters: ErrorCluster[]): Promise<string> {
+  const clusterSummary = summarizeClusters(clusters);
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-5",

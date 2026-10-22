@@ -44,5 +44,6 @@ invited to that channel.
   message shape — log a real triggered alert and a real resolved one, then
   adjust the field/text lookups to match your PD-Slack app config.
 - `lookupDebugId` is a stub pointing at a placeholder Cal endpoint.
-- No retry/error handling yet if Datadog or Cal calls fail mid-flow — right
-  now a failure just throws and the message goes unanswered.
+- Failures are retried (3 attempts, exponential backoff) and then degrade to a
+  partial reply in the thread, but there's no persistent retry queue — a long
+  Datadog outage means that alert only gets the "check manually" message.
